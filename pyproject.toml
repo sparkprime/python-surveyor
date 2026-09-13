@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["python_surveyor"]
+
+[project]
+name = "python-surveyor"
+version = "0.1.0"
+description = "Use python introspection to survey source code for final LLM judgement"
+requires-python = ">=3.12"
+
+dependencies = [
+    "click>=8.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyright==1.1.411",
+    "pytest>=8.0.0",
+    "pytest-cov",
+    "coverage",
+    "black == 26.5.1",
+    "isort == 8.0.1",
+    "pylint == 4.0.6",
+]
+
+[project.scripts]
+python-surveyor = "python_surveyor.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+]
+xfail_strict = true
+log_level = "INFO"
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["python_surveyor"]
+
+[tool.pyright]
+include = ["python_surveyor", "tests"]
+venvPath = "."
+venv = ".venv"
+reportMissingTypeStubs = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportImportCycles = "none"
+
+[tool.pylint.'MASTER']
+ignore-paths = [
+    "^tests/",
+]
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    "too-few-public-methods",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+    "too-many-return-statements",
+    "too-many-instance-attributes",
+    "too-many-nested-blocks",
+    "fixme",
+]

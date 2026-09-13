@@ -1,0 +1,106 @@
+"""``fixture-naming`` check.
+
+Finds ``@pytest.fixture``/``@fixture``-decorated functions whose registered
+fixture name does not match the convention: the function should be prefixed
+with ``fixture_`` **and** ``name=`` should register the true fixture name. A
+note reports the effective registered name and the corpus lookup of
+parameter usages of that name elsewhere (the actual
+``redefined-outer-name`` collision sites).
+"""
+
+import ast
+from typing import TYPE_CHECKING
+
+from python_surveyor.model import Finding
+
+if TYPE_CHECKING:
+    from python_surveyor.scanner import Corpus, SourceFile
+
+
+def _decorator_info(
+    deco: ast.expr,
+) -> "tuple[bool, bool, str | None]":
+    """Return ``(is_fixture, has_name_kwarg, name_value)`` for a decorator."""
+    call: ast.Call | None = None
+    expr = deco
+    if isinstance(expr, ast.Call):
+        call = expr
+        expr = expr.func
+    is_fixture = False
+    if isinstance(expr, ast.Attribute) and expr.attr == "fixture":
+        if isinstance(expr.value, ast.Name) and expr.value.id == "pytest":
+            is_fixture = True
+    elif isinstance(expr, ast.Name) and expr.id == "fixture":
+        is_fixture = True
+    if not is_fixture or call is None:
+        return is_fixture, False, None
+    name_value: str | None = None
+    has_name = False
+    for kw in call.keywords:
+        if kw.arg == "name":
+            has_name = True
+            if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                name_value = kw.value.value
+    return True, has_name, name_value
+
+
+def _collision_note(registered_name: str, corpus: "Corpus") -> str:
+    sites = corpus.param_locations.get(registered_name, ())
+    count = len(sites)
+    if count == 0:
+        return f"registered as `{registered_name}`; no parameter usages elsewhere"
+    samples = sorted(sites, key=lambda pair: (str(pair[0].path), pair[0].line))[
+        : corpus.max_call_sites
+    ]
+    rendered = ", ".join(
+        f"{pair[0].path.name}:{pair[0].line} (in `{pair[1]}`)" for pair in samples
+    )
+    suffix = "" if count <= corpus.max_call_sites else ", ..."
+    return (
+        f"registered as `{registered_name}`; parameter used in "
+        f"{count} other function(s): {rendered}{suffix}"
+    )
+
+
+def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
+    """Find fixture-naming issues and attach collision-site context."""
+    findings: list[Finding] = []
+    for node in ast.walk(source.tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        fixture_deco: ast.expr | None = None
+        has_name_kwarg = False
+        name_value: str | None = None
+        for deco in node.decorator_list:
+            is_fixture, has_name, value = _decorator_info(deco)
+            if is_fixture:
+                fixture_deco = deco
+                has_name_kwarg = has_name
+                name_value = value
+                break
+        if fixture_deco is None:
+            continue
+        starts_with_fixture_ = node.name.startswith("fixture_")
+        if has_name_kwarg and starts_with_fixture_:
+            continue
+        registered_name = name_value if name_value is not None else node.name
+        reasons: list[str] = []
+        if not has_name_kwarg:
+            reasons.append("no `name=` kwarg")
+        if not starts_with_fixture_:
+            reasons.append(f"name `{node.name}` lacks `fixture_` prefix")
+        findings.append(
+            Finding(
+                check_id="fixture-naming",
+                path=source.path,
+                line=node.lineno,
+                column=node.col_offset,
+                message=(
+                    f"fixture function `{node.name}` registered as "
+                    f"`{registered_name}` ({'; '.join(reasons)})"
+                ),
+                excerpts=(),
+                notes=(_collision_note(registered_name, corpus),),
+            )
+        )
+    return findings
