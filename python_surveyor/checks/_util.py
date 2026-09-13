@@ -1,10 +1,10 @@
 """Shared helpers for check implementations.
 
-These are intentionally tiny: the comment-walk used by three checks
-(suppressions, mutable-globals, non-toplevel-imports) and the
-control-flow-node tuple shared by mutable-globals and non-toplevel-imports.
-Excerpt-line capping is a rendering concern and lives in
-:mod:`python_surveyor.report`.
+Every finding needs two pieces of context that are shared across all checks:
+the source line(s) at the finding location (so the reader can see the actual
+code) and any justifying comment block immediately above it (so the reader
+can judge whether the smell is intentional). Excerpt-line capping is a
+rendering concern and lives in :mod:`python_surveyor.report`.
 
 ``SourceFile`` is imported only under ``TYPE_CHECKING`` to avoid a circular
 import with :mod:`python_surveyor.scanner`.
@@ -52,14 +52,13 @@ def preceding_comment_block(
     return start, end
 
 
-def preceding_comment_excerpt(
-    source: "SourceFile", line: int
-) -> tuple[SourceExcerpt, ...]:
+def justifying_comment(source: "SourceFile", line: int) -> tuple[SourceExcerpt, ...]:
     """Return a 1-tuple excerpt for the comment block above ``line``, or ``()``.
 
-    Centralizes the walk-up + excerpt construction shared by the
-    suppressions, mutable-globals, and non-toplevel-imports checks so the
-    logic isn't duplicated across check files.
+    If a preceding ``#``-comment block is found, it is attached as an excerpt
+    labeled "justifying comment". If no preceding comment block is found,
+    returns ``()`` — the absence of the excerpt is the signal that no
+    justifying comment exists, so no note is needed.
     """
     block = preceding_comment_block(source, line)
     if block is None:
@@ -67,7 +66,7 @@ def preceding_comment_excerpt(
     start, end = block
     return (
         SourceExcerpt(
-            label="preceding comments",
+            label="justifying comment",
             path=source.path,
             start_line=start,
             end_line=end,

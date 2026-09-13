@@ -90,4 +90,4 @@ def test_except_body_excerpt(make_source_file, empty_corpus):
     )
     source_file = make_source_file("a.py", source)
     findings = run(source_file, empty_corpus)
-    assert findings[0].excerpts[0].label == "except body"
+    assert findings[0].excerpts[0].label == "source"

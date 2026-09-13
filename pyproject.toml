@@ -73,5 +73,6 @@ disable = [
     "too-many-return-statements",
     "too-many-instance-attributes",
     "too-many-nested-blocks",
+    "duplicate-code",
     "fixme",
 ]

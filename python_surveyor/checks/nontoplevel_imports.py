@@ -2,9 +2,10 @@
 
 Finds ``Import``/``ImportFrom`` nodes that are not direct children of
 ``Module.body`` (i.e. nested inside a function, class, or control-flow block
-at any depth). The preceding comment block is attached as an excerpt and a
-note names the nearest enclosing scope so the agent can judge whether the
-late import is justified (e.g. test-harness monkeypatching) or just laziness.
+at any depth). The import line is attached as an excerpt (extended upward to
+include any justifying comment block), and a note names the nearest
+enclosing scope so the agent can judge whether the late import is justified
+(e.g. test-harness monkeypatching) or just laziness.
 """
 
 import ast
@@ -12,9 +13,9 @@ from typing import TYPE_CHECKING
 
 from python_surveyor.checks._util import (
     CONTROL_FLOW_NODES,
-    preceding_comment_excerpt,
+    justifying_comment,
 )
-from python_surveyor.model import Finding
+from python_surveyor.model import Finding, SourceExcerpt
 
 if TYPE_CHECKING:
     from python_surveyor.scanner import Corpus, SourceFile
@@ -91,7 +92,8 @@ def _record(
     findings: list[Finding],
 ) -> None:
     line = stmt.lineno
-    excerpts = preceding_comment_excerpt(source, line)
+    jc = justifying_comment(source, line)
+    start = jc[0].start_line if jc else line
     nearest = scope_stack[-1] if scope_stack else None
     note = (
         f"inside {_scope_label(nearest)}"
@@ -105,14 +107,21 @@ def _record(
             line=line,
             column=stmt.col_offset,
             message="import below module top-level",
-            excerpts=excerpts,
+            excerpts=(
+                SourceExcerpt(
+                    label="source",
+                    path=source.path,
+                    start_line=start,
+                    end_line=line,
+                ),
+            ),
             notes=(note,),
         )
     )
 
 
 def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
-    """Find non-top-level imports and attach enclosing-scope context."""
+    """Find non-top-level imports and attach source + enclosing-scope context."""
     findings: list[Finding] = []
     _walk(source.tree.body, [], source, findings)
     return findings

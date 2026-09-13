@@ -125,6 +125,32 @@ def test_build_corpus_call_sites(tmp_path):
     corpus = _build_corpus([source_file], max_call_sites=5)
     assert "helper" in corpus.call_sites
     assert "method" in corpus.call_sites
+    assert corpus.call_sites["helper"][0].positional_count == 0
+
+
+def test_build_corpus_call_args(tmp_path):
+    source = (
+        "def f(a, b=1, *, c=2):\n" "    pass\n" "f(1)\n" "f(1, 2, c=3)\n" "f(1, b=2)\n"
+    )
+    path = tmp_path / "a.py"
+    path.write_text(source, encoding="utf-8")
+    tree = ast.parse(source)
+    source_file = SourceFile(
+        path=path,
+        source=source,
+        lines=tuple(source.splitlines()),
+        tree=tree,
+        tokens=(),
+    )
+    corpus = _build_corpus([source_file], max_call_sites=5)
+    sites = corpus.call_sites["f"]
+    assert len(sites) == 3
+    assert sites[0].positional_count == 1
+    assert sites[0].keywords == frozenset()
+    assert sites[1].positional_count == 2
+    assert sites[1].keywords == frozenset({"c"})
+    assert sites[2].positional_count == 1
+    assert sites[2].keywords == frozenset({"b"})
 
 
 def test_build_corpus_param_locations(tmp_path):

@@ -1,9 +1,10 @@
 """Render a ``ScanResult`` as text or JSON.
 
 Text output groups findings by ``check_id``; each finding is shown as
-``path:line:col -- message`` followed by labeled, line-numbered excerpts and
-note lines. Parse errors get their own leading section. Excerpts are capped
-to ``max_excerpt_lines`` with a truncation note.
+``path:line:col -- message`` followed by labeled excerpts (with the line
+range in the header) and note lines. Parse errors get their own leading
+section. Excerpts are capped to ``--max-excerpt-lines`` with a truncation
+note.
 
 JSON output is a flat list of the same fields for programmatic use (excerpt
 text is not included — only the line range, so consumers can lazy-load).
@@ -13,6 +14,7 @@ import json
 from pathlib import Path
 from typing import TextIO
 
+from python_surveyor.checks import CHECKS_BY_ID
 from python_surveyor.scanner import ScanResult
 
 
@@ -53,15 +55,16 @@ def render_text(
             stream.write(f"{err.path}:{err.line} -- {err.message}\n")
         stream.write("\n")
     current_check: str | None = None
+    counter = 0
     for finding in result.findings:
         if finding.check_id != current_check:
             current_check = finding.check_id
+            counter = 0
             stream.write(f"## {current_check}\n\n")
-        stream.write(
-            f"{finding.path}:{finding.line}:{finding.column} -- " f"{finding.message}\n"
-        )
-        for note in finding.notes:
-            stream.write(f"  note: {note}\n")
+            spec = CHECKS_BY_ID.get(current_check)
+            if spec is not None:
+                stream.write(f"{spec.explanation}\n\n")
+        counter += 1
         for excerpt in finding.excerpts:
             lines, truncation = _read_excerpt_lines(
                 excerpt.path,
@@ -70,14 +73,15 @@ def render_text(
                 max_excerpt_lines,
             )
             stream.write(
-                f"  [{excerpt.label}] {excerpt.path}:"
+                f"({counter}) {excerpt.path}:"
                 f"{excerpt.start_line}-{excerpt.end_line}\n"
             )
-            for idx, line in enumerate(lines):
-                line_no = excerpt.start_line + idx
-                stream.write(f"    {line_no:>4} | {line}\n")
+            for line in lines:
+                stream.write(f"{line}\n")
             if truncation:
-                stream.write(f"    ... {truncation}\n")
+                stream.write(f"... {truncation}\n")
+        for note in finding.notes:
+            stream.write(f"  note: {note}\n")
         stream.write("\n")
     if not result.findings:
         stream.write("no findings.\n")

@@ -2,16 +2,18 @@
 
 Finds ``@pytest.fixture``/``@fixture``-decorated functions whose registered
 fixture name does not match the convention: the function should be prefixed
-with ``fixture_`` **and** ``name=`` should register the true fixture name. A
-note reports the effective registered name and the corpus lookup of
-parameter usages of that name elsewhere (the actual
+with ``fixture_`` **and** ``name=`` should register the true fixture name.
+The ``def`` line is attached as an excerpt (extended upward to include any
+justifying comment block), and a note reports the effective registered name
+and the corpus lookup of parameter usages of that name elsewhere (the actual
 ``redefined-outer-name`` collision sites).
 """
 
 import ast
 from typing import TYPE_CHECKING
 
-from python_surveyor.model import Finding
+from python_surveyor.checks._util import justifying_comment
+from python_surveyor.model import Finding, SourceExcerpt
 
 if TYPE_CHECKING:
     from python_surveyor.scanner import Corpus, SourceFile
@@ -63,7 +65,7 @@ def _collision_note(registered_name: str, corpus: "Corpus") -> str:
 
 
 def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
-    """Find fixture-naming issues and attach collision-site context."""
+    """Find fixture-naming issues and attach source + collision-site context."""
     findings: list[Finding] = []
     for node in ast.walk(source.tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -89,6 +91,8 @@ def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
             reasons.append("no `name=` kwarg")
         if not starts_with_fixture_:
             reasons.append(f"name `{node.name}` lacks `fixture_` prefix")
+        jc = justifying_comment(source, node.lineno)
+        start = jc[0].start_line if jc else node.lineno
         findings.append(
             Finding(
                 check_id="fixture-naming",
@@ -99,7 +103,14 @@ def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
                     f"fixture function `{node.name}` registered as "
                     f"`{registered_name}` ({'; '.join(reasons)})"
                 ),
-                excerpts=(),
+                excerpts=(
+                    SourceExcerpt(
+                        label="source",
+                        path=source.path,
+                        start_line=start,
+                        end_line=node.lineno,
+                    ),
+                ),
                 notes=(_collision_note(registered_name, corpus),),
             )
         )

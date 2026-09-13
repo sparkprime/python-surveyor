@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from python_surveyor.checks import ALL_CHECKS, CheckSpec
-from python_surveyor.model import Finding, Location, ParseError
+from python_surveyor.model import CallSite, Finding, Location, ParseError
 
 DEFAULT_PRUNED_DIRS: tuple[str, ...] = (
     ".venv",
@@ -74,7 +74,7 @@ class Corpus:
     flag so checks don't need optional parameters of their own).
     """
 
-    call_sites: dict[str, tuple[Location, ...]]
+    call_sites: dict[str, tuple[CallSite, ...]]
     param_locations: dict[str, tuple[tuple[Location, str], ...]]
     max_call_sites: int
 
@@ -157,6 +157,16 @@ def _resolve_call_name(node: ast.Call) -> str | None:
     return None
 
 
+def _call_positional_count(node: ast.Call) -> int:
+    """Count positional args (excluding ``*args`` spreads)."""
+    return sum(1 for arg in node.args if not isinstance(arg, ast.Starred))
+
+
+def _call_keywords(node: ast.Call) -> frozenset[str]:
+    """Return the set of keyword arg names (excluding ``**kwargs`` spreads)."""
+    return frozenset(kw.arg for kw in node.keywords if kw.arg is not None)
+
+
 def _collect_params(
     func_node: "ast.FunctionDef | ast.AsyncFunctionDef",
     path: Path,
@@ -177,7 +187,7 @@ def _collect_params(
 
 
 def _build_corpus(source_files: list[SourceFile], max_call_sites: int) -> Corpus:
-    call_sites: dict[str, list[Location]] = {}
+    call_sites: dict[str, list[CallSite]] = {}
     param_locations: dict[str, list[tuple[Location, str]]] = {}
     for source_file in source_files:
         for node in ast.walk(source_file.tree):
@@ -186,7 +196,11 @@ def _build_corpus(source_files: list[SourceFile], max_call_sites: int) -> Corpus
                 if resolved is None:
                     continue
                 call_sites.setdefault(resolved, []).append(
-                    Location(path=source_file.path, line=node.lineno)
+                    CallSite(
+                        location=Location(path=source_file.path, line=node.lineno),
+                        positional_count=_call_positional_count(node),
+                        keywords=_call_keywords(node),
+                    )
                 )
                 continue
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

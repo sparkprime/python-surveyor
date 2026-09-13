@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 from python_surveyor.checks.broad_except import run as run_broad_except
 from python_surveyor.checks.fixture_naming import run as run_fixture_naming
 from python_surveyor.checks.future_annotations import run as run_future_annotations
-from python_surveyor.checks.mutable_globals import run as run_mutable_globals
 from python_surveyor.checks.nontoplevel_imports import run as run_nontoplevel_imports
 from python_surveyor.checks.optional_params import run as run_optional_params
 from python_surveyor.checks.suppressions import run as run_suppressions
@@ -29,65 +28,94 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CheckSpec:
-    """A single check: id, human description, and the runner."""
+    """A single check: id, short description, longer explanation, and runner.
+
+    ``description`` is the one-liner shown by ``list-checks``.
+    ``explanation`` is shown as a header note when the text report has
+    findings for this check, so the reader understands *why* the smell
+    matters before judging each hit.
+    """
 
     check_id: str
     description: str
+    explanation: str
     run: "Callable[[SourceFile, Corpus], list[Finding]]"
 
 
-ALL_CHECKS: tuple[CheckSpec, ...] = (
-    CheckSpec(
-        check_id="broad-except",
-        description=(
-            "ExceptHandler with no type, or type Exception/BaseException "
-            "(including tuples and except*)."
-        ),
-        run=run_broad_except,
+_ALL_CHECKS_DATA: tuple[
+    tuple[str, str, str, "Callable[[SourceFile, Corpus], list[Finding]]"], ...
+] = (
+    (
+        "broad-except",
+        "ExceptHandler with no type, or type Exception/BaseException "
+        "(including tuples and except*).",
+        "Catching a narrower exception type is usually better — it makes "
+        "the intent explicit and avoids swallowing unexpected bugs. When a "
+        "broad except is necessary, it should typically re-raise to "
+        "preserve the stack trace for actual bugs rather than silently "
+        "discarding them.",
+        run_broad_except,
     ),
-    CheckSpec(
-        check_id="fixture-naming",
-        description=(
-            "@pytest.fixture function whose registered name does not match "
-            "its declared name (the redefined-outer-name collision case)."
-        ),
-        run=run_fixture_naming,
+    (
+        "fixture-naming",
+        "@pytest.fixture function whose registered name does not match "
+        "its declared name (the redefined-outer-name collision case).",
+        "A pytest fixture function should be prefixed with `fixture_` and "
+        "register its real name via `name=` so the function parameter in "
+        "test functions doesn't shadow the fixture function name — the "
+        "`redefined-outer-name` pylint disable that AI code often adds to "
+        "silence this is a symptom, not a fix.",
+        run_fixture_naming,
     ),
-    CheckSpec(
-        check_id="future-annotations-import",
-        description="`from __future__ import annotations` (we never use 3.9).",
-        run=run_future_annotations,
+    (
+        "future-annotations-import",
+        "`from __future__ import annotations` (we never use 3.9).",
+        "`from __future__ import annotations` makes all type annotations "
+        "strings at runtime, which breaks any code that relies on "
+        "resolving types at runtime (e.g. `typing.get_type_hints`, "
+        "Pydantic models, FastAPI dependency injection). Since the "
+        "target is always Python 3.12+, it's unnecessary and should be "
+        "removed.",
+        run_future_annotations,
     ),
-    CheckSpec(
-        check_id="mutable-module-global",
-        description=(
-            "Module-scope assignment whose target name is not UPPER_CASE and "
-            "not a dunder."
-        ),
-        run=run_mutable_globals,
+    (
+        "non-toplevel-import",
+        "Import/ImportFrom not directly in Module.body, at any nesting depth.",
+        "Imports inside functions or blocks are usually a sign of lazy "
+        "import resolution — often masking circular dependencies that "
+        "should be fixed with proper architecture. There may be a good "
+        "reason (e.g. performance, test-harness monkeypatching), but "
+        "absent one, imports should be at module top level.",
+        run_nontoplevel_imports,
     ),
-    CheckSpec(
-        check_id="non-toplevel-import",
-        description=(
-            "Import/ImportFrom not directly in Module.body, at any nesting " "depth."
-        ),
-        run=run_nontoplevel_imports,
+    (
+        "optional-param-default",
+        "FunctionDef with >=1 defaulted positional or keyword-only parameter.",
+        "Defaulted parameters are often added to avoid updating existing "
+        "call sites, but they make it impossible for pyright to flag "
+        "callers that should be passing an explicit value — the type "
+        "checker sees the default and moves on. On internal APIs, every "
+        "caller should pass an explicit value so pyright can catch "
+        "missing or wrong arguments.",
+        run_optional_params,
     ),
-    CheckSpec(
-        check_id="optional-param-default",
-        description=(
-            "FunctionDef with >=1 defaulted positional or keyword-only " "parameter."
-        ),
-        run=run_optional_params,
+    (
+        "suppression-comment",
+        "# pylint: disable=... or # pyright: ignore without a "
+        "justifying comment block above.",
+        "Suppression comments disable a linter's check for a line or "
+        "region. They're sometimes necessary, but each one should have a "
+        "comment explaining *why* the suppression is warranted — without "
+        "that, the suppression is indistinguishable from silencing a real "
+        "problem.",
+        run_suppressions,
     ),
-    CheckSpec(
-        check_id="suppression-comment",
-        description=(
-            "# pylint: disable=... or # pyright: ignore without a "
-            "justifying comment block above."
-        ),
-        run=run_suppressions,
-    ),
+)
+
+
+ALL_CHECKS: tuple[CheckSpec, ...] = tuple(
+    CheckSpec(check_id=cid, description=desc, explanation=expl, run=run)
+    for cid, desc, expl, run in _ALL_CHECKS_DATA
 )
 
 CHECKS_BY_ID: dict[str, CheckSpec] = {
