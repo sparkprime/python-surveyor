@@ -33,10 +33,8 @@ def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
                         path=source.path,
                         line=node.lineno,
                         column=node.col_offset,
-                        message="`from __future__ import annotations`",
                         excerpts=(
                             SourceExcerpt(
-                                label="source",
                                 path=source.path,
                                 start_line=start,
                                 end_line=node.lineno,

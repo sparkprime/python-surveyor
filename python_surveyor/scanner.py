@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from python_surveyor.checks import ALL_CHECKS, CheckSpec
+from python_surveyor.checks import ALL_CHECKS, COVERED_PYLINT_IDS, CheckSpec
 from python_surveyor.model import CallSite, Finding, Location, ParseError
 
 DEFAULT_PRUNED_DIRS: tuple[str, ...] = (
@@ -77,6 +77,7 @@ class Corpus:
     call_sites: dict[str, tuple[CallSite, ...]]
     param_locations: dict[str, tuple[tuple[Location, str], ...]]
     max_call_sites: int
+    covered_pylint_ids: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,11 @@ def _collect_params(
         )
 
 
-def _build_corpus(source_files: list[SourceFile], max_call_sites: int) -> Corpus:
+def _build_corpus(
+    source_files: list[SourceFile],
+    max_call_sites: int,
+    covered_pylint_ids: frozenset[str],
+) -> Corpus:
     call_sites: dict[str, list[CallSite]] = {}
     param_locations: dict[str, list[tuple[Location, str]]] = {}
     for source_file in source_files:
@@ -209,6 +214,7 @@ def _build_corpus(source_files: list[SourceFile], max_call_sites: int) -> Corpus
         call_sites={k: tuple(v) for k, v in call_sites.items()},
         param_locations={k: tuple(v) for k, v in param_locations.items()},
         max_call_sites=max_call_sites,
+        covered_pylint_ids=covered_pylint_ids,
     )
 
 
@@ -238,7 +244,7 @@ def scan(
             continue
         assert parsed is not None
         source_files.append(parsed)
-    corpus = _build_corpus(source_files, max_call_sites)
+    corpus = _build_corpus(source_files, max_call_sites, COVERED_PYLINT_IDS)
     findings: list[Finding] = []
     for source_file in source_files:
         for check_spec in enabled_checks:

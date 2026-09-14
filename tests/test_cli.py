@@ -1,7 +1,5 @@
 """End-to-end CLI tests using click's ``CliRunner``."""
 
-import json
-
 from click.testing import CliRunner
 
 from python_surveyor.cli import main
@@ -25,20 +23,6 @@ def test_scan_text(tmp_path):
     assert result.exit_code == 0
     assert "future-annotations-import" in result.output
     assert "file(s) scanned" in result.output
-
-
-def test_scan_json(tmp_path):
-    (tmp_path / "a.py").write_text(
-        "from __future__ import annotations\n", encoding="utf-8"
-    )
-    runner = CliRunner()
-    result = runner.invoke(main, ["scan", str(tmp_path), "--format", "json"])
-    assert result.exit_code == 0
-    payload = json.loads(result.output)
-    assert payload["files_scanned"] == 1
-    assert any(
-        f["check_id"] == "future-annotations-import" for f in payload["findings"]
-    )
 
 
 def test_scan_no_findings(tmp_path):

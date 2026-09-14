@@ -11,6 +11,12 @@ name = "python-surveyor"
 version = "0.1.0"
 description = "Use python introspection to survey source code for final LLM judgement"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Dave Cunningham" },
+]
+urls = { Homepage = "https://github.com/sparkprime/python-surveyor" }
 
 dependencies = [
     "click>=8.1.0",
@@ -75,4 +81,7 @@ disable = [
     "too-many-nested-blocks",
     "duplicate-code",
     "fixme",
+]
+enable = [
+    "useless-suppression",
 ]

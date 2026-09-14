@@ -34,16 +34,24 @@ class CheckSpec:
     ``explanation`` is shown as a header note when the text report has
     findings for this check, so the reader understands *why* the smell
     matters before judging each hit.
+    ``pylint_equivalents`` lists pylint check IDs that this check already
+    covers, so the ``suppression-comment`` check can skip ``# pylint:
+    disable=`` directives that are fully redundant with another check (the
+    list is parsed and checked against this set — no regex to maintain).
     """
 
     check_id: str
     description: str
     explanation: str
+    pylint_equivalents: tuple[str, ...]
     run: "Callable[[SourceFile, Corpus], list[Finding]]"
 
 
 _ALL_CHECKS_DATA: tuple[
-    tuple[str, str, str, "Callable[[SourceFile, Corpus], list[Finding]]"], ...
+    tuple[
+        str, str, str, tuple[str, ...], "Callable[[SourceFile, Corpus], list[Finding]]"
+    ],
+    ...,
 ] = (
     (
         "broad-except",
@@ -54,6 +62,7 @@ _ALL_CHECKS_DATA: tuple[
         "broad except is necessary, it should typically re-raise to "
         "preserve the stack trace for actual bugs rather than silently "
         "discarding them.",
+        ("broad-exception-caught",),
         run_broad_except,
     ),
     (
@@ -65,6 +74,7 @@ _ALL_CHECKS_DATA: tuple[
         "test functions doesn't shadow the fixture function name — the "
         "`redefined-outer-name` pylint disable that AI code often adds to "
         "silence this is a symptom, not a fix.",
+        ("redefined-outer-name",),
         run_fixture_naming,
     ),
     (
@@ -76,6 +86,7 @@ _ALL_CHECKS_DATA: tuple[
         "Pydantic models, FastAPI dependency injection). Since the "
         "target is always Python 3.12+, it's unnecessary and should be "
         "removed.",
+        (),
         run_future_annotations,
     ),
     (
@@ -86,6 +97,7 @@ _ALL_CHECKS_DATA: tuple[
         "should be fixed with proper architecture. There may be a good "
         "reason (e.g. performance, test-harness monkeypatching), but "
         "absent one, imports should be at module top level.",
+        ("import-outside-toplevel",),
         run_nontoplevel_imports,
     ),
     (
@@ -97,6 +109,7 @@ _ALL_CHECKS_DATA: tuple[
         "checker sees the default and moves on. On internal APIs, every "
         "caller should pass an explicit value so pyright can catch "
         "missing or wrong arguments.",
+        (),
         run_optional_params,
     ),
     (
@@ -108,16 +121,27 @@ _ALL_CHECKS_DATA: tuple[
         "comment explaining *why* the suppression is warranted — without "
         "that, the suppression is indistinguishable from silencing a real "
         "problem.",
+        (),
         run_suppressions,
     ),
 )
 
 
 ALL_CHECKS: tuple[CheckSpec, ...] = tuple(
-    CheckSpec(check_id=cid, description=desc, explanation=expl, run=run)
-    for cid, desc, expl, run in _ALL_CHECKS_DATA
+    CheckSpec(
+        check_id=cid,
+        description=desc,
+        explanation=expl,
+        pylint_equivalents=equiv,
+        run=run,
+    )
+    for cid, desc, expl, equiv, run in _ALL_CHECKS_DATA
 )
 
 CHECKS_BY_ID: dict[str, CheckSpec] = {
     check_spec.check_id: check_spec for check_spec in ALL_CHECKS
 }
+
+COVERED_PYLINT_IDS: frozenset[str] = frozenset(
+    eq for check in ALL_CHECKS for eq in check.pylint_equivalents
+)

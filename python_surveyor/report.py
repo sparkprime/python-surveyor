@@ -1,16 +1,11 @@
-"""Render a ``ScanResult`` as text or JSON.
+"""Render a ``ScanResult`` as text.
 
 Text output groups findings by ``check_id``; each finding is shown as
-``path:line:col -- message`` followed by labeled excerpts (with the line
-range in the header) and note lines. Parse errors get their own leading
-section. Excerpts are capped to ``--max-excerpt-lines`` with a truncation
-note.
-
-JSON output is a flat list of the same fields for programmatic use (excerpt
-text is not included — only the line range, so consumers can lazy-load).
+``path:line:col`` followed by excerpts (with the line range in the header)
+and note lines. Parse errors get their own leading section. Excerpts are
+capped to ``--max-excerpt-lines`` with a truncation note.
 """
 
-import json
 from pathlib import Path
 from typing import TextIO
 
@@ -65,6 +60,8 @@ def render_text(
             if spec is not None:
                 stream.write(f"{spec.explanation}\n\n")
         counter += 1
+        prev_path: Path | None = None
+        prev_end: int | None = None
         for excerpt in finding.excerpts:
             lines, truncation = _read_excerpt_lines(
                 excerpt.path,
@@ -72,66 +69,29 @@ def render_text(
                 excerpt.end_line,
                 max_excerpt_lines,
             )
-            stream.write(
-                f"({counter}) {excerpt.path}:"
-                f"{excerpt.start_line}-{excerpt.end_line}\n"
+            is_continuation = (
+                prev_path == excerpt.path
+                and prev_end is not None
+                and excerpt.start_line > prev_end + 1
             )
+            if is_continuation:
+                stream.write(
+                    f"... (redacted until lines "
+                    f"{excerpt.start_line}-{excerpt.end_line}) ...\n"
+                )
+            else:
+                stream.write(
+                    f"({counter}) {excerpt.path}:"
+                    f"{excerpt.start_line}-{excerpt.end_line}\n"
+                )
             for line in lines:
                 stream.write(f"{line}\n")
             if truncation:
                 stream.write(f"... {truncation}\n")
+            prev_path = excerpt.path
+            prev_end = excerpt.end_line
         for note in finding.notes:
             stream.write(f"  note: {note}\n")
         stream.write("\n")
     if not result.findings:
         stream.write("no findings.\n")
-
-
-def render_json(
-    result: ScanResult,
-    max_excerpt_lines: int,
-    stream: TextIO,
-) -> None:
-    """Render ``result`` as JSON to ``stream``.
-
-    ``max_excerpt_lines`` is accepted for API symmetry with
-    :func:`render_text`; JSON emits ranges only, not source text.
-    """
-    del max_excerpt_lines
-    findings_payload = []
-    for finding in result.findings:
-        excerpts_payload = [
-            {
-                "label": excerpt.label,
-                "path": str(excerpt.path),
-                "start_line": excerpt.start_line,
-                "end_line": excerpt.end_line,
-            }
-            for excerpt in finding.excerpts
-        ]
-        findings_payload.append(
-            {
-                "check_id": finding.check_id,
-                "path": str(finding.path),
-                "line": finding.line,
-                "column": finding.column,
-                "message": finding.message,
-                "excerpts": excerpts_payload,
-                "notes": list(finding.notes),
-            }
-        )
-    parse_errors_payload = [
-        {
-            "path": str(err.path),
-            "line": err.line,
-            "message": err.message,
-        }
-        for err in result.parse_errors
-    ]
-    payload = {
-        "files_scanned": result.files_scanned,
-        "findings": findings_payload,
-        "parse_errors": parse_errors_payload,
-    }
-    json.dump(payload, stream, indent=2)
-    stream.write("\n")

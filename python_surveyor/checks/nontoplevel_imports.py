@@ -106,10 +106,8 @@ def _record(
             path=source.path,
             line=line,
             column=stmt.col_offset,
-            message="import below module top-level",
             excerpts=(
                 SourceExcerpt(
-                    label="source",
                     path=source.path,
                     start_line=start,
                     end_line=line,

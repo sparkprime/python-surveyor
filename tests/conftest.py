@@ -17,6 +17,7 @@ from typing import Callable
 
 import pytest
 
+from python_surveyor.checks import COVERED_PYLINT_IDS
 from python_surveyor.scanner import (
     Corpus,
     SourceFile,
@@ -47,7 +48,12 @@ def fixture_make_source_file(tmp_path: Path) -> Callable[[str, str], SourceFile]
 @pytest.fixture(name="empty_corpus")
 def fixture_empty_corpus() -> Corpus:
     """A ``Corpus`` with empty indices and the default call-site cap."""
-    return Corpus(call_sites={}, param_locations={}, max_call_sites=5)
+    return Corpus(
+        call_sites={},
+        param_locations={},
+        max_call_sites=10,
+        covered_pylint_ids=COVERED_PYLINT_IDS,
+    )
 
 
 @pytest.fixture(name="make_corpus")
@@ -58,6 +64,6 @@ def fixture_make_corpus(
 
     def make_corpus(sources: dict[str, str]) -> Corpus:
         files = [make_source_file(name, src) for name, src in sources.items()]
-        return _build_corpus(files, max_call_sites=5)
+        return _build_corpus(files, 10, COVERED_PYLINT_IDS)
 
     return make_corpus

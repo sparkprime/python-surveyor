@@ -5,6 +5,7 @@ import dataclasses
 
 import pytest
 
+from python_surveyor.checks import COVERED_PYLINT_IDS
 from python_surveyor.scanner import (
     Corpus,
     ScanResult,
@@ -122,7 +123,7 @@ def test_build_corpus_call_sites(tmp_path):
         tree=tree,
         tokens=(),
     )
-    corpus = _build_corpus([source_file], max_call_sites=5)
+    corpus = _build_corpus([source_file], 5, COVERED_PYLINT_IDS)
     assert "helper" in corpus.call_sites
     assert "method" in corpus.call_sites
     assert corpus.call_sites["helper"][0].positional_count == 0
@@ -142,7 +143,7 @@ def test_build_corpus_call_args(tmp_path):
         tree=tree,
         tokens=(),
     )
-    corpus = _build_corpus([source_file], max_call_sites=5)
+    corpus = _build_corpus([source_file], 5, COVERED_PYLINT_IDS)
     sites = corpus.call_sites["f"]
     assert len(sites) == 3
     assert sites[0].positional_count == 1
@@ -165,7 +166,7 @@ def test_build_corpus_param_locations(tmp_path):
         tree=tree,
         tokens=(),
     )
-    corpus = _build_corpus([source_file], max_call_sites=5)
+    corpus = _build_corpus([source_file], 5, COVERED_PYLINT_IDS)
     assert "db" in corpus.param_locations
     assert len(corpus.param_locations["db"]) == 2
 
@@ -188,7 +189,12 @@ def test_scan_result_is_sorted(tmp_path):
 
 
 def test_corpus_is_immutable():
-    corpus = Corpus(call_sites={}, param_locations={}, max_call_sites=5)
+    corpus = Corpus(
+        call_sites={},
+        param_locations={},
+        max_call_sites=5,
+        covered_pylint_ids=COVERED_PYLINT_IDS,
+    )
     with pytest.raises(dataclasses.FrozenInstanceError):
         corpus.max_call_sites = 10  # type: ignore[misc]
 

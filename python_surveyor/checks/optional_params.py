@@ -2,11 +2,15 @@
 
 Finds any ``FunctionDef``/``AsyncFunctionDef`` with at least one defaulted
 positional or keyword-only parameter (``*args``/``**kwargs`` names are not
-"parameters" for this purpose). The ``def`` line is attached as an excerpt
-(extended upward to include any justifying comment block), and a note
-reports the corpus call-site count, how many call sites use the default vs
-override it, and samples — so the agent can judge whether the optional
-param is actually exercised across the scanned tree.
+"parameters" for this purpose). The signature (justifying comment + ``def``
+line up to the ``:``) is attached as an excerpt, and notes report:
+
+* the defaulted parameter names,
+* whether the function is a public or internal API (``_``-prefix convention),
+* call sites that rely on at least one default value (capped at
+  ``corpus.max_call_sites``, with "and N other(s)" when truncated) —
+  call sites that override every default are not listed, since they don't
+  exercise the default path.
 """
 
 import ast
@@ -35,12 +39,6 @@ def _defaulted_param_names(
     return names
 
 
-def _has_defaulted_param(
-    func: "ast.FunctionDef | ast.AsyncFunctionDef",
-) -> bool:
-    return bool(_defaulted_param_names(func))
-
-
 def _param_uses_default(
     param_name: str,
     param_index: int,
@@ -59,68 +57,52 @@ def _call_site_notes(
     defaulted_params: list[str],
     corpus: "Corpus",
 ) -> tuple[str, ...]:
-    """Return notes describing call-site usage of defaulted params.
+    """Return notes describing call sites that use at least one default value.
 
-    Splits call sites into "explicit value" and "using default" groups so
-    the agent can see whether the defaults are actually relied upon.
+    Call sites that override every defaulted param are not listed — they
+    don't exercise the default path and only add noise.  Call sites that
+    use at least one default are listed (capped at ``corpus.max_call_sites``)
+    with "and N other(s)" when truncated.
     """
     sites = corpus.call_sites.get(name, ())
-    count = len(sites)
-    if count == 0:
+    total = len(sites)
+    if total == 0:
         return (f"`{name}` not called from anywhere scanned",)
-    explicit: list[CallSite] = []
     using_default: list[CallSite] = []
     for site in sites:
-        any_default = False
-        any_override = False
         for idx, param_name in enumerate(defaulted_params):
             if _param_uses_default(param_name, idx, site):
-                any_default = True
-            else:
-                any_override = True
-        if any_override:
-            explicit.append(site)
-        elif any_default:
-            using_default.append(site)
-    explicit_sorted = sorted(
-        explicit, key=lambda s: (str(s.location.path), s.location.line)
-    )
-    default_sorted = sorted(
+                using_default.append(site)
+                break
+    using_default_sorted = sorted(
         using_default, key=lambda s: (str(s.location.path), s.location.line)
     )
     cap = corpus.max_call_sites
-    explicit_sample = explicit_sorted[:cap]
-    default_sample = default_sorted[:cap]
-    explicit_str = ", ".join(
-        f"{s.location.path.name}:{s.location.line}" for s in explicit_sample
-    )
-    if len(explicit) > cap:
-        explicit_str += ", ..."
-    default_str = ", ".join(
-        f"{s.location.path.name}:{s.location.line}" for s in default_sample
-    )
-    if len(using_default) > cap:
-        default_str += ", ..."
-    if not explicit:
-        explicit_str = "None"
-    if not using_default:
-        default_str = "None"
+    shown = using_default_sorted[:cap]
+    if not shown:
+        return (f"All {total} call site(s) override every defaulted parameter",)
+    parts = [f"{s.location.path.name}:{s.location.line}" for s in shown]
+    remaining = len(using_default) - len(shown)
+    if remaining > 0:
+        parts.append(f"and {remaining} other(s)")
+    sites_str = ", ".join(parts)
     return (
-        f"Call sites with explicit value: {explicit_str}",
-        f"Call sites using default: {default_str}",
+        f"Call sites using defaults ({len(using_default)} of {total}): {sites_str}",
     )
 
 
-def _def_end_line(node: "ast.FunctionDef | ast.AsyncFunctionDef") -> int:
-    """Return the last line of the ``def`` signature (may span multiple lines)."""
-    end = getattr(node, "end_lineno", None)
-    if end is not None:
-        return end
-    return node.lineno
+def _signature_end_line(
+    node: "ast.FunctionDef | ast.AsyncFunctionDef",
+) -> int:
+    """Return the last line of the ``def`` signature (the ``:`` line)."""
+    if not node.body:
+        return node.lineno
+    first_body = node.body[0]
+    return max(node.lineno, first_body.lineno - 1)
 
 
 def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
-    """Find functions with defaulted params and attach source + call-site context."""
+    """Find functions with defaulted params and attach signature + call-site context."""
     findings: list[Finding] = []
     for node in ast.walk(source.tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -130,26 +112,24 @@ def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
             continue
         jc = justifying_comment(source, node.lineno)
         start = jc[0].start_line if jc else node.lineno
-        end = _def_end_line(node)
+        end = _signature_end_line(node)
         findings.append(
             Finding(
                 check_id="optional-param-default",
                 path=source.path,
                 line=node.lineno,
                 column=node.col_offset,
-                message=(
-                    f"function `{node.name}` has defaulted parameter(s): "
-                    f"{', '.join(defaulted)}"
-                ),
                 excerpts=(
                     SourceExcerpt(
-                        label="source",
                         path=source.path,
                         start_line=start,
                         end_line=end,
                     ),
                 ),
-                notes=_call_site_notes(node.name, defaulted, corpus),
+                notes=(
+                    f"Defaulted params: {', '.join(defaulted)}",
+                    *_call_site_notes(node.name, defaulted, corpus),
+                ),
             )
         )
     return findings

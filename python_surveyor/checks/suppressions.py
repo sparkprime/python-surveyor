@@ -24,12 +24,17 @@ if TYPE_CHECKING:
     from python_surveyor.scanner import Corpus, SourceFile
 
 _SUPPRESSION_RE = re.compile(r"pylint:\s*disable[-\w]*\s*=|pyright:\s*ignore")
-_ALREADY_COVERED_RE = re.compile(
-    r"pylint:\s*disable[-\w]*\s*=\s*[\w,\s]*"
-    r"(?:broad-exception-caught|redefined-outer-name)"
-)
+_PYLINT_DISABLE_RE = re.compile(r"pylint:\s*disable[-\w]*\s*=\s*(.+)")
 _ENABLE_RE = re.compile(r"pylint:\s*enable[-\w]*\s*=")
 _MAX_SUPPRESSED_LINES = 10
+
+
+def _all_pylint_ids_covered(comment: str, covered: frozenset[str]) -> bool:
+    m = _PYLINT_DISABLE_RE.search(comment)
+    if m is None:
+        return False
+    ids = {part.strip() for part in m.group(1).split(",") if part.strip()}
+    return ids <= covered
 
 
 def _is_standalone_comment(source: "SourceFile", row: int) -> bool:
@@ -55,7 +60,7 @@ def _find_enable_or_end(source: "SourceFile", row: int) -> int:
     return limit
 
 
-def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
+def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
     """Find suppression comments and attach source + justifying-comment context."""
     findings: list[Finding] = []
     for token in source.tokens:
@@ -63,7 +68,7 @@ def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
             continue
         if not _SUPPRESSION_RE.search(token.string):
             continue
-        if _ALREADY_COVERED_RE.search(token.string):
+        if _all_pylint_ids_covered(token.string, corpus.covered_pylint_ids):
             continue
         row = token.start[0]
         jc = justifying_comment(source, row)
@@ -78,10 +83,8 @@ def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
                 path=source.path,
                 line=row,
                 column=token.start[1],
-                message="suppression comment (pylint: disable / pyright: ignore)",
                 excerpts=(
                     SourceExcerpt(
-                        label="source",
                         path=source.path,
                         start_line=start,
                         end_line=end,

@@ -7,7 +7,7 @@ from typing import TextIO
 import click
 
 from python_surveyor.checks import ALL_CHECKS
-from python_surveyor.report import render_json, render_text
+from python_surveyor.report import render_text
 from python_surveyor.scanner import scan
 
 
@@ -31,13 +31,6 @@ def main() -> None:
     help="fnmatch pattern to exclude (repeatable, additive to defaults).",
 )
 @click.option(
-    "--format",
-    "fmt",
-    type=click.Choice(["text", "json"]),
-    default="text",
-    help="Output format. Default: text.",
-)
-@click.option(
     "--output",
     "output",
     type=click.Path(path_type=Path),
@@ -55,14 +48,13 @@ def main() -> None:
     "--max-call-sites",
     "max_call_sites",
     type=int,
-    default=5,
-    help="Cap call-site samples in notes (default 5).",
+    default=10,
+    help="Cap call-site samples in notes (default 10).",
 )
 def scan_cmd(
     paths: tuple[str, ...],
     check_ids: tuple[str, ...],
     excludes: tuple[str, ...],
-    fmt: str,
     output: "Path | None",
     max_excerpt_lines: int,
     max_call_sites: int,
@@ -81,10 +73,7 @@ def scan_cmd(
     else:
         stream = sys.stdout
     try:
-        if fmt == "json":
-            render_json(result, max_excerpt_lines, stream)
-        else:
-            render_text(result, max_excerpt_lines, stream)
+        render_text(result, max_excerpt_lines, stream)
     finally:
         if output is not None:
             stream.close()

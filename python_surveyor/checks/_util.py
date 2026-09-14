@@ -66,7 +66,6 @@ def justifying_comment(source: "SourceFile", line: int) -> tuple[SourceExcerpt, 
     start, end = block
     return (
         SourceExcerpt(
-            label="justifying comment",
             path=source.path,
             start_line=start,
             end_line=end,

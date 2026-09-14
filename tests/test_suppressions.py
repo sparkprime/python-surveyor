@@ -11,7 +11,8 @@ def test_pylint_disable_without_preceding_comment(make_source_file, empty_corpus
     finding = findings[0]
     assert finding.check_id == "suppression-comment"
     assert finding.notes == ()
-    assert not any(e.label == "justifying comment" for e in finding.excerpts)
+    assert len(finding.excerpts) == 1
+    assert finding.excerpts[0].start_line == 1
 
 
 def test_pyright_ignore_without_preceding_comment(make_source_file, empty_corpus):
@@ -20,7 +21,8 @@ def test_pyright_ignore_without_preceding_comment(make_source_file, empty_corpus
     findings = run(source_file, empty_corpus)
     assert len(findings) == 1
     assert findings[0].notes == ()
-    assert not any(e.label == "justifying comment" for e in findings[0].excerpts)
+    assert len(findings[0].excerpts) == 1
+    assert findings[0].excerpts[0].start_line == 1
 
 
 def test_pylint_disable_next_line(make_source_file, empty_corpus):
@@ -42,7 +44,6 @@ def test_suppression_with_preceding_comment(make_source_file, empty_corpus):
     assert len(findings) == 1
     assert findings[0].notes == ()
     excerpt = findings[0].excerpts[0]
-    assert excerpt.label == "source"
     assert excerpt.start_line == 1
     assert excerpt.end_line == 3
 
@@ -113,8 +114,15 @@ def test_broad_exception_caught_not_flagged(make_source_file, empty_corpus):
     assert findings == []
 
 
-def test_broad_exception_caught_in_list_not_flagged(make_source_file, empty_corpus):
+def test_broad_exception_caught_mixed_list_flagged(make_source_file, empty_corpus):
     source = "x = 1  # pylint: disable=broad-exception-caught,missing-docstring\n"
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
+
+
+def test_all_covered_in_list_not_flagged(make_source_file, empty_corpus):
+    source = "x = 1  # pylint: disable=broad-exception-caught,import-outside-toplevel\n"
     source_file = make_source_file("a.py", source)
     findings = run(source_file, empty_corpus)
     assert findings == []
@@ -127,8 +135,15 @@ def test_redefined_outer_name_not_flagged(make_source_file, empty_corpus):
     assert findings == []
 
 
-def test_redefined_outer_name_in_list_not_flagged(make_source_file, empty_corpus):
+def test_redefined_outer_name_mixed_list_flagged(make_source_file, empty_corpus):
     source = "x = 1  # pylint: disable=redefined-outer-name,missing-docstring\n"
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
+
+
+def test_import_outside_toplevel_not_flagged(make_source_file, empty_corpus):
+    source = "x = 1  # pylint: disable=import-outside-toplevel\n"
     source_file = make_source_file("a.py", source)
     findings = run(source_file, empty_corpus)
     assert findings == []

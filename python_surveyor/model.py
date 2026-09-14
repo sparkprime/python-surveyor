@@ -37,7 +37,6 @@ class CallSite:
 class SourceExcerpt:
     """A literal slice of source worth showing verbatim."""
 
-    label: str
     path: Path
     start_line: int
     end_line: int
@@ -51,7 +50,6 @@ class Finding:
     path: Path
     line: int
     column: int
-    message: str
     excerpts: tuple[SourceExcerpt, ...]
     notes: tuple[str, ...]
 
