@@ -122,10 +122,21 @@ def test_signature_excerpt_not_full_body(make_source_file, empty_corpus):
     assert excerpt.end_line == 1
 
 
-def test_no_api_note(make_source_file, empty_corpus):
-    source = "def _helper(a=1):\n    pass\n"
+def test_signature_elides_non_defaulted_params(make_source_file, empty_corpus):
+    source = "def f(a, b, c=3):\n    pass\n"
     source_file = make_source_file("a.py", source)
     findings = run(source_file, empty_corpus)
     assert len(findings) == 1
-    notes = "\n".join(findings[0].notes)
-    assert "API" not in notes
+    excerpt = findings[0].excerpts[0]
+    assert excerpt.start_line == 1
+    assert excerpt.end_line == 1
+
+
+def test_signature_elides_with_multiline_def(make_source_file, empty_corpus):
+    source = "def f(\n    a,\n    b,\n    c=3,\n):\n    pass\n"
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
+    excerpt = findings[0].excerpts[0]
+    assert excerpt.start_line == 4
+    assert excerpt.end_line == 5

@@ -1,9 +1,4 @@
-"""Frozen dataclasses shared by scanner, checks, and report renderers.
-
-All construction uses required positional fields; there are no
-default-valued fields on ``Finding``/``SourceExcerpt``, consistent with the
-"no optional params on internal APIs" rule this tool itself checks for.
-"""
+"""Frozen dataclasses shared by scanner, checks, and report renderers."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,7 +46,7 @@ class Finding:
     line: int
     column: int
     excerpts: tuple[SourceExcerpt, ...]
-    notes: tuple[str, ...]
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

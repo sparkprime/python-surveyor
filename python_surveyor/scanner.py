@@ -87,6 +87,7 @@ class ScanResult:
     findings: tuple[Finding, ...]
     parse_errors: tuple[ParseError, ...]
     files_scanned: int
+    source_lines: "dict[str, tuple[str, ...]]"
 
 
 def _discover(root_paths: tuple[str, ...], excludes: tuple[str, ...]) -> Iterator[Path]:
@@ -176,6 +177,9 @@ def _collect_params(
     args = func_node.args
     skip_names = {"self", "cls"}
     names: list[str] = []
+    for arg in args.posonlyargs:
+        if arg.arg not in skip_names:
+            names.append(arg.arg)
     for arg in args.args:
         if arg.arg not in skip_names:
             names.append(arg.arg)
@@ -254,4 +258,5 @@ def scan(
         findings=tuple(findings),
         parse_errors=tuple(parse_errors),
         files_scanned=len(source_files),
+        source_lines={str(f.path): f.lines for f in source_files},
     )

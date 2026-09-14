@@ -3,14 +3,11 @@
 Finds any ``FunctionDef``/``AsyncFunctionDef`` with at least one defaulted
 positional or keyword-only parameter (``*args``/``**kwargs`` names are not
 "parameters" for this purpose). The signature (justifying comment + ``def``
-line up to the ``:``) is attached as an excerpt, and notes report:
-
-* the defaulted parameter names,
-* whether the function is a public or internal API (``_``-prefix convention),
-* call sites that rely on at least one default value (capped at
-  ``corpus.max_call_sites``, with "and N other(s)" when truncated) —
-  call sites that override every default are not listed, since they don't
-  exercise the default path.
+line, with non-defaulted leading params elided) is attached as an excerpt,
+and notes report the defaulted parameter names plus call sites that rely on
+at least one default value (capped at ``corpus.max_call_sites``, with
+"and N other(s)" when truncated) — call sites that override every default
+are not listed, since they don't exercise the default path.
 """
 
 import ast
@@ -37,6 +34,25 @@ def _defaulted_param_names(
         if default is not None:
             names.append(args.kwonlyargs[idx].arg)
     return names
+
+
+def _first_defaulted_line(
+    func: "ast.FunctionDef | ast.AsyncFunctionDef",
+) -> int:
+    """Return the source line of the first defaulted parameter.
+
+    Non-defaulted positional params before the first default are elided
+    from the excerpt, so the reader sees only the params that matter.
+    """
+    args = func.args
+    positional_defaults = len(args.defaults)
+    first_defaulted_idx = len(args.args) - positional_defaults
+    if positional_defaults > 0:
+        return args.args[first_defaulted_idx].lineno
+    for idx, default in enumerate(args.kw_defaults):
+        if default is not None:
+            return args.kwonlyargs[idx].lineno
+    return func.lineno
 
 
 def _param_uses_default(
@@ -111,7 +127,9 @@ def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
         if not defaulted:
             continue
         jc = justifying_comment(source, node.lineno)
-        start = jc[0].start_line if jc else node.lineno
+        jc_start = jc[0].start_line if jc else None
+        sig_start = _first_defaulted_line(node)
+        start = jc_start if jc_start is not None else sig_start
         end = _signature_end_line(node)
         findings.append(
             Finding(

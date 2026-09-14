@@ -6,7 +6,6 @@ and note lines. Parse errors get their own leading section. Excerpts are
 capped to ``--max-excerpt-lines`` with a truncation note.
 """
 
-from pathlib import Path
 from typing import TextIO
 
 from python_surveyor.checks import CHECKS_BY_ID
@@ -14,25 +13,28 @@ from python_surveyor.scanner import ScanResult
 
 
 def _read_excerpt_lines(
-    path: Path, start: int, end: int, max_lines: int
+    source_lines: "dict[str, tuple[str, ...]]",
+    path_str: str,
+    start: int,
+    end: int,
+    max_lines: int,
 ) -> "tuple[list[str], str | None]":
-    """Read ``[start, end]`` from ``path``, capping to ``max_lines``.
+    """Read ``[start, end]`` from ``source_lines``, capping to ``max_lines``.
 
     Returns ``(lines, truncation_note)``.
     """
-    try:
-        all_lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
+    all_lines = source_lines.get(path_str)
+    if all_lines is None:
         return ([], None)
     available_end = min(end, len(all_lines))
     if available_end < start:
         return ([], None)
     span = available_end - start + 1
     if span <= max_lines:
-        return (all_lines[start - 1 : available_end], None)
+        return (list(all_lines[start - 1 : available_end]), None)
     capped_end = start + max_lines - 1
     return (
-        all_lines[start - 1 : capped_end],
+        list(all_lines[start - 1 : capped_end]),
         f"excerpt truncated at {max_lines} lines",
     )
 
@@ -60,17 +62,19 @@ def render_text(
             if spec is not None:
                 stream.write(f"{spec.explanation}\n\n")
         counter += 1
-        prev_path: Path | None = None
+        prev_path_str: str | None = None
         prev_end: int | None = None
         for excerpt in finding.excerpts:
+            path_str = str(excerpt.path)
             lines, truncation = _read_excerpt_lines(
-                excerpt.path,
+                result.source_lines,
+                path_str,
                 excerpt.start_line,
                 excerpt.end_line,
                 max_excerpt_lines,
             )
             is_continuation = (
-                prev_path == excerpt.path
+                prev_path_str == path_str
                 and prev_end is not None
                 and excerpt.start_line > prev_end + 1
             )
@@ -88,7 +92,7 @@ def render_text(
                 stream.write(f"{line}\n")
             if truncation:
                 stream.write(f"... {truncation}\n")
-            prev_path = excerpt.path
+            prev_path_str = path_str
             prev_end = excerpt.end_line
         for note in finding.notes:
             stream.write(f"  note: {note}\n")

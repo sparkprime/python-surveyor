@@ -7,6 +7,10 @@ comment above, the ``try`` line, and any comment block immediately after
 the ``try`` — but no code from inside the try body) and the ``except``
 side (the ``except`` line plus handler body, capped at ``_WINDOW``
 lines). If the two excerpts overlap, they are merged into one.
+
+Handlers that re-raise (bare ``raise``) or call ``logger.exception(...)``
+are not flagged — re-raising preserves the stack trace, and
+``logger.exception`` captures it (though the error is still swallowed).
 """
 
 import ast
@@ -29,6 +33,30 @@ def _type_contains_broad(node: ast.expr | None) -> bool:
         return node.id in _BROAD_NAMES
     if isinstance(node, ast.Tuple):
         return any(_type_contains_broad(elt) for elt in node.elts)
+    return False
+
+
+def _is_reraise(stmt: ast.stmt) -> bool:
+    """True if ``stmt`` is a bare ``raise`` (re-raises the current exception)."""
+    return isinstance(stmt, ast.Raise) and stmt.exc is None and stmt.cause is None
+
+
+def _is_logger_exception(stmt: ast.stmt) -> bool:
+    """True if ``stmt`` is ``<something>.exception(...)`` (e.g. ``logger.exception``)."""
+    if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
+        return False
+    func = stmt.value.func
+    return isinstance(func, ast.Attribute) and func.attr == "exception"
+
+
+def _handler_re_raises_or_logs(handler: ast.ExceptHandler) -> bool:
+    """True if the handler body re-raises or calls ``logger.exception``."""
+    for stmt in handler.body:
+        for sub in ast.walk(stmt):
+            if isinstance(sub, ast.stmt) and (
+                _is_reraise(sub) or _is_logger_exception(sub)
+            ):
+                return True
     return False
 
 
@@ -122,6 +150,8 @@ def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
         for handler in node.handlers:
             if not _type_contains_broad(handler.type):
                 continue
+            if _handler_re_raises_or_logs(handler):
+                continue
             body_end = _body_end(handler)
             excerpts = _try_except_excerpts(
                 source, jc_start, node.lineno, handler.lineno, body_end
@@ -133,7 +163,6 @@ def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
                     line=handler.lineno,
                     column=handler.col_offset,
                     excerpts=excerpts,
-                    notes=(),
                 )
             )
     return findings

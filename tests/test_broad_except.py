@@ -63,6 +63,47 @@ def test_except_specific_not_flagged(make_source_file, empty_corpus):
     assert findings == []
 
 
+def test_bare_reraise_not_flagged(make_source_file, empty_corpus):
+    source = (
+        "def f():\n"
+        "    try:\n"
+        "        pass\n"
+        "    except Exception:\n"
+        "        raise\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_logger_exception_not_flagged(make_source_file, empty_corpus):
+    source = (
+        "import logging\n"
+        "logger = logging.getLogger(__name__)\n"
+        "def f():\n"
+        "    try:\n"
+        "        pass\n"
+        "    except Exception:\n"
+        "        logger.exception('failed')\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_reraise_with_value_still_flagged(make_source_file, empty_corpus):
+    source = (
+        "def f():\n"
+        "    try:\n"
+        "        pass\n"
+        "    except Exception as e:\n"
+        "        raise RuntimeError('bad') from e\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
+
+
 def test_except_star_exception(make_source_file, empty_corpus):
     source = (
         "def f():\n"
