@@ -8,7 +8,7 @@ include = ["python_surveyor"]
 
 [project]
 name = "python-surveyor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Use python introspection to survey source code for final LLM judgement"
 requires-python = ">=3.12"
 license = "MIT"
