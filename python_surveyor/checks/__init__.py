@@ -102,13 +102,18 @@ _ALL_CHECKS_DATA: tuple[
     ),
     (
         "optional-param-default",
-        "FunctionDef with >=1 defaulted positional or keyword-only parameter.",
+        "FunctionDef with >=1 defaulted positional or keyword-only parameter, "
+        "excluding FastAPI/Flask route handlers (verified via real imports).",
         "Defaulted parameters are often added to avoid updating existing "
         "call sites, but they make it impossible for pyright to flag "
         "callers that should be passing an explicit value — the type "
         "checker sees the default and moves on. On internal APIs, every "
         "caller should pass an explicit value so pyright can catch "
-        "missing or wrong arguments.",
+        "missing or wrong arguments. FastAPI/Flask route handlers are "
+        "excluded because their defaults are a framework user interface "
+        "(query parameters, headers) and the handler is invoked by the "
+        "framework, not by application code — the 'not called from "
+        "anywhere' signal doesn't apply.",
         (),
         run_optional_params,
     ),

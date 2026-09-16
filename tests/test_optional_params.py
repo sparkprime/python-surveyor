@@ -140,3 +140,150 @@ def test_signature_elides_with_multiline_def(make_source_file, empty_corpus):
     excerpt = findings[0].excerpts[0]
     assert excerpt.start_line == 4
     assert excerpt.end_line == 5
+
+
+# --- FastAPI / Flask route-handler exclusion ------------------------------
+
+
+def test_fastapi_app_get_handler_excluded(make_source_file, empty_corpus):
+    source = (
+        "from fastapi import FastAPI\n"
+        "app = FastAPI()\n"
+        "@app.get('/x')\n"
+        "def handler(q: str = 'a'):\n"
+        "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_fastapi_router_post_handler_excluded(make_source_file, empty_corpus):
+    source = (
+        "from fastapi import APIRouter as AR\n"
+        "router = AR()\n"
+        "@router.post('/x')\n"
+        "async def create(q: int = 0):\n"
+        "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_fastapi_module_import_form_excluded(make_source_file, empty_corpus):
+    source = (
+        "import fastapi\n"
+        "app = fastapi.FastAPI()\n"
+        "@app.get('/x')\n"
+        "def handler(q: str = 'a'):\n"
+        "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_fastapi_api_route_handler_excluded(make_source_file, empty_corpus):
+    source = (
+        "from fastapi import FastAPI\n"
+        "app = FastAPI()\n"
+        "@app.api_route('/x', methods=['GET'])\n"
+        "def handler(q: str = 'a'):\n"
+        "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_fastapi_websocket_handler_excluded(make_source_file, empty_corpus):
+    source = (
+        "from fastapi import FastAPI\n"
+        "app = FastAPI()\n"
+        "@app.websocket('/ws')\n"
+        "async def ws_handler(q: str = 'a'):\n"
+        "    pass\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_flask_app_route_handler_excluded(make_source_file, empty_corpus):
+    source = (
+        "from flask import Flask\n"
+        "app = Flask(__name__)\n"
+        "@app.route('/x')\n"
+        "def handler(q='a'):\n"
+        "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_flask_blueprint_get_handler_excluded(make_source_file, empty_corpus):
+    source = (
+        "from flask import Blueprint\n"
+        "bp = Blueprint('bp', __name__)\n"
+        "@bp.get('/x')\n"
+        "def handler(q='a'):\n"
+        "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert findings == []
+
+
+def test_fastapi_handler_and_plain_function_mixed(make_source_file, empty_corpus):
+    """A route handler is excluded but a plain defaulted function still flagged."""
+    source = (
+        "from fastapi import FastAPI\n"
+        "app = FastAPI()\n"
+        "@app.get('/x')\n"
+        "def handler(q: str = 'a'):\n"
+        "    return q\n"
+        "def plain(x=1):\n"
+        "    return x\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
+    assert findings[0].line == 6
+
+
+def test_non_framework_decorator_still_flagged(make_source_file, empty_corpus):
+    """A custom .get() decorator with no fastapi/flask import is still flagged."""
+    source = (
+        "class MyAPI:\n"
+        "    def get(self, *a, **k):\n"
+        "        def deco(f):\n"
+        "            return f\n"
+        "        return deco\n"
+        "api = MyAPI()\n"
+        "@api.get()\n"
+        "def handler(q=1):\n"
+        "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
+
+
+def test_no_framework_import_still_flagged(make_source_file, empty_corpus):
+    """Decorator shaped like a route but with no fastapi/flask import is flagged."""
+    source = (
+        "app = object()\n" "@app.get('/x')\n" "def handler(q=1):\n" "    return q\n"
+    )
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
+
+
+def test_staticmethod_decorator_still_flagged(make_source_file, empty_corpus):
+    """Unrelated decorators (staticmethod) don't cause exclusion."""
+    source = "class C:\n" "    @staticmethod\n" "    def f(a=1):\n" "        return a\n"
+    source_file = make_source_file("a.py", source)
+    findings = run(source_file, empty_corpus)
+    assert len(findings) == 1
