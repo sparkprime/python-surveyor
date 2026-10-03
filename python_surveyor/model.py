@@ -13,22 +13,6 @@ class Location:
 
 
 @dataclass(frozen=True)
-class CallSite:
-    """A call to a name, with enough info to tell if defaulted params are used.
-
-    ``positional_count`` is the number of positional args (not counting
-    ``*args`` spreads). ``keywords`` is the set of keyword arg names (not
-    counting ``**kwargs`` spreads). Together these let the
-    ``optional-param-default`` check determine whether a call site uses the
-    default value or passes an explicit one.
-    """
-
-    location: Location
-    positional_count: int
-    keywords: frozenset[str]
-
-
-@dataclass(frozen=True)
 class SourceExcerpt:
     """A literal slice of source worth showing verbatim."""
 

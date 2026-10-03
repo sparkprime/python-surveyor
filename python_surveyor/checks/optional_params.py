@@ -4,29 +4,26 @@ Finds any ``FunctionDef``/``AsyncFunctionDef`` with at least one defaulted
 positional or keyword-only parameter (``*args``/``**kwargs`` names are not
 "parameters" for this purpose). The signature (justifying comment + ``def``
 line, with non-defaulted leading params elided) is attached as an excerpt,
-and notes report the defaulted parameter names plus call sites that rely on
-at least one default value (capped at ``corpus.max_call_sites``, with
-"and N other(s)" when truncated) — call sites that override every default
-are not listed, since they don't exercise the default path.
+and a note reports the defaulted parameter names.
 
 **Framework route handlers are excluded.** FastAPI/Flask route handlers use
 defaulted params as a user interface (query parameters, headers, etc.) and
-are invoked by the framework rather than by application code, so the
-"missing call sites" signal this check looks for doesn't apply. A handler is
-recognised only when its decorator (e.g. ``@app.get(...)``, ``@router.post(
-...)``, ``@app.route(...)``) is a call on a name that is statically traced,
-via imports in the same file, to an actual ``fastapi.FastAPI`` /
-``fastapi.APIRouter`` / ``flask.Flask`` / ``flask.Blueprint`` instance. Only
-direct ``name = Ctor()`` assignments are tracked — factory functions that
-build and return an app/router are not (this matches the heuristic, not
-exhaustive, philosophy of the other checks).
+are invoked by the framework rather than by application code, so the smell
+this check looks for doesn't apply. A handler is recognised only when its
+decorator (e.g. ``@app.get(...)``, ``@router.post(...)``, ``@app.route(
+...)``) is a call on a name that is statically traced, via imports in the
+same file, to an actual ``fastapi.FastAPI`` / ``fastapi.APIRouter`` /
+``flask.Flask`` / ``flask.Blueprint`` instance. Only direct ``name = Ctor()``
+assignments are tracked — factory functions that build and return an
+app/router are not (this matches the heuristic, not exhaustive, philosophy
+of the other checks).
 """
 
 import ast
 from typing import TYPE_CHECKING
 
 from python_surveyor.checks._util import justifying_comment
-from python_surveyor.model import CallSite, Finding, SourceExcerpt
+from python_surveyor.model import Finding, SourceExcerpt
 
 if TYPE_CHECKING:
     from python_surveyor.scanner import Corpus, SourceFile
@@ -208,58 +205,6 @@ def _first_defaulted_line(
     return func.lineno
 
 
-def _param_uses_default(
-    param_name: str,
-    param_index: int,
-    call: CallSite,
-) -> bool:
-    """True if the call site does not pass this param (uses the default)."""
-    if param_name in call.keywords:
-        return False
-    if param_index < call.positional_count:
-        return False
-    return True
-
-
-def _call_site_notes(
-    name: str,
-    defaulted_params: list[str],
-    corpus: "Corpus",
-) -> tuple[str, ...]:
-    """Return notes describing call sites that use at least one default value.
-
-    Call sites that override every defaulted param are not listed — they
-    don't exercise the default path and only add noise.  Call sites that
-    use at least one default are listed (capped at ``corpus.max_call_sites``)
-    with "and N other(s)" when truncated.
-    """
-    sites = corpus.call_sites.get(name, ())
-    total = len(sites)
-    if total == 0:
-        return (f"`{name}` not called from anywhere scanned",)
-    using_default: list[CallSite] = []
-    for site in sites:
-        for idx, param_name in enumerate(defaulted_params):
-            if _param_uses_default(param_name, idx, site):
-                using_default.append(site)
-                break
-    using_default_sorted = sorted(
-        using_default, key=lambda s: (str(s.location.path), s.location.line)
-    )
-    cap = corpus.max_call_sites
-    shown = using_default_sorted[:cap]
-    if not shown:
-        return (f"All {total} call site(s) override every defaulted parameter",)
-    parts = [f"{s.location.path.name}:{s.location.line}" for s in shown]
-    remaining = len(using_default) - len(shown)
-    if remaining > 0:
-        parts.append(f"and {remaining} other(s)")
-    sites_str = ", ".join(parts)
-    return (
-        f"Call sites using defaults ({len(using_default)} of {total}): {sites_str}",
-    )
-
-
 def _signature_end_line(
     node: "ast.FunctionDef | ast.AsyncFunctionDef",
 ) -> int:
@@ -270,8 +215,8 @@ def _signature_end_line(
     return max(node.lineno, first_body.lineno - 1)
 
 
-def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
-    """Find functions with defaulted params and attach signature + call-site context."""
+def run(source: "SourceFile", _corpus: "Corpus") -> list[Finding]:
+    """Find functions with defaulted params and attach signature context."""
     router_names = _framework_object_names(source.tree)
     findings: list[Finding] = []
     for node in ast.walk(source.tree):
@@ -302,10 +247,7 @@ def run(source: "SourceFile", corpus: "Corpus") -> list[Finding]:
                         end_line=end,
                     ),
                 ),
-                notes=(
-                    f"Defaulted params: {', '.join(defaulted)}",
-                    *_call_site_notes(node.name, defaulted, corpus),
-                ),
+                notes=(f"Defaulted params: {', '.join(defaulted)}",),
             )
         )
     return findings

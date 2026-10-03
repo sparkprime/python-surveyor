@@ -25,7 +25,7 @@ def test_scan_finds_smelly_file(tmp_path):
         root_paths=(str(tmp_path),),
         check_ids=None,
         excludes=(),
-        max_call_sites=5,
+        max_samples=5,
     )
     check_ids_found = {f.check_id for f in result.findings}
     assert "future-annotations-import" in check_ids_found
@@ -40,7 +40,7 @@ def test_scan_parse_error(tmp_path):
         root_paths=(str(tmp_path),),
         check_ids=None,
         excludes=(),
-        max_call_sites=5,
+        max_samples=5,
     )
     assert result.parse_errors
     assert result.parse_errors[0].path == broken
@@ -58,7 +58,7 @@ def test_scan_prunes_venv(tmp_path):
         root_paths=(str(tmp_path),),
         check_ids=None,
         excludes=(),
-        max_call_sites=5,
+        max_samples=5,
     )
     assert result.files_scanned == 1
     assert result.findings == ()
@@ -75,7 +75,7 @@ def test_scan_exclude_glob(tmp_path):
         root_paths=(str(tmp_path),),
         check_ids=None,
         excludes=("vendor",),
-        max_call_sites=5,
+        max_samples=5,
     )
     assert result.files_scanned == 1
 
@@ -89,7 +89,7 @@ def test_scan_check_subset(tmp_path):
         root_paths=(str(tmp_path),),
         check_ids=("future-annotations-import",),
         excludes=(),
-        max_call_sites=5,
+        max_samples=5,
     )
     assert all(f.check_id == "future-annotations-import" for f in result.findings)
     assert any(f.check_id == "future-annotations-import" for f in result.findings)
@@ -101,57 +101,8 @@ def test_scan_unknown_check_id_raises():
             root_paths=(".",),
             check_ids=("nonexistent-check",),
             excludes=(),
-            max_call_sites=5,
+            max_samples=5,
         )
-
-
-def test_build_corpus_call_sites(tmp_path):
-    source = (
-        "def helper():\n"
-        "    pass\n"
-        "def caller():\n"
-        "    helper()\n"
-        "    other.method()\n"
-    )
-    path = tmp_path / "a.py"
-    path.write_text(source, encoding="utf-8")
-    tree = ast.parse(source)
-    source_file = SourceFile(
-        path=path,
-        source=source,
-        lines=tuple(source.splitlines()),
-        tree=tree,
-        tokens=(),
-    )
-    corpus = _build_corpus([source_file], 5, COVERED_PYLINT_IDS)
-    assert "helper" in corpus.call_sites
-    assert "method" in corpus.call_sites
-    assert corpus.call_sites["helper"][0].positional_count == 0
-
-
-def test_build_corpus_call_args(tmp_path):
-    source = (
-        "def f(a, b=1, *, c=2):\n" "    pass\n" "f(1)\n" "f(1, 2, c=3)\n" "f(1, b=2)\n"
-    )
-    path = tmp_path / "a.py"
-    path.write_text(source, encoding="utf-8")
-    tree = ast.parse(source)
-    source_file = SourceFile(
-        path=path,
-        source=source,
-        lines=tuple(source.splitlines()),
-        tree=tree,
-        tokens=(),
-    )
-    corpus = _build_corpus([source_file], 5, COVERED_PYLINT_IDS)
-    sites = corpus.call_sites["f"]
-    assert len(sites) == 3
-    assert sites[0].positional_count == 1
-    assert sites[0].keywords == frozenset()
-    assert sites[1].positional_count == 2
-    assert sites[1].keywords == frozenset({"c"})
-    assert sites[2].positional_count == 1
-    assert sites[2].keywords == frozenset({"b"})
 
 
 def test_build_corpus_param_locations(tmp_path):
@@ -182,7 +133,7 @@ def test_scan_result_is_sorted(tmp_path):
         root_paths=(str(tmp_path),),
         check_ids=None,
         excludes=(),
-        max_call_sites=5,
+        max_samples=5,
     )
     paths = [str(f.path) for f in result.findings]
     assert paths == sorted(paths)
@@ -190,13 +141,12 @@ def test_scan_result_is_sorted(tmp_path):
 
 def test_corpus_is_immutable():
     corpus = Corpus(
-        call_sites={},
         param_locations={},
-        max_call_sites=5,
+        max_samples=5,
         covered_pylint_ids=COVERED_PYLINT_IDS,
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
-        corpus.max_call_sites = 10  # type: ignore[misc]
+        corpus.max_samples = 10  # type: ignore[misc]
 
 
 def test_scan_result_fields(tmp_path):
@@ -205,7 +155,7 @@ def test_scan_result_fields(tmp_path):
         root_paths=(str(tmp_path),),
         check_ids=None,
         excludes=(),
-        max_call_sites=5,
+        max_samples=5,
     )
     assert isinstance(result, ScanResult)
     assert result.files_scanned == 1

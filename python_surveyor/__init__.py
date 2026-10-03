@@ -1,7 +1,6 @@
 """python-surveyor: AST-based scanner for AI-generated-code smells."""
 
 from python_surveyor.model import (
-    CallSite,
     Finding,
     Location,
     ParseError,
@@ -9,7 +8,6 @@ from python_surveyor.model import (
 )
 
 __all__ = [
-    "CallSite",
     "Finding",
     "Location",
     "ParseError",

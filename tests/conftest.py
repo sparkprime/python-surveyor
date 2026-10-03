@@ -47,11 +47,10 @@ def fixture_make_source_file(tmp_path: Path) -> Callable[[str, str], SourceFile]
 
 @pytest.fixture(name="empty_corpus")
 def fixture_empty_corpus() -> Corpus:
-    """A ``Corpus`` with empty indices and the default call-site cap."""
+    """A ``Corpus`` with empty indices and the default sample cap."""
     return Corpus(
-        call_sites={},
         param_locations={},
-        max_call_sites=10,
+        max_samples=10,
         covered_pylint_ids=COVERED_PYLINT_IDS,
     )
 

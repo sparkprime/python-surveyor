@@ -51,7 +51,7 @@ def _collision_note(registered_name: str, corpus: "Corpus") -> str:
     count = len(sites)
     if count == 0:
         return f"registered as `{registered_name}`; no parameter usages elsewhere"
-    cap = corpus.max_call_sites
+    cap = corpus.max_samples
     samples = sorted(sites, key=lambda pair: (str(pair[0].path), pair[0].line))[:cap]
     rendered = ", ".join(
         f"{pair[0].path.name}:{pair[0].line} (in `{pair[1]}`)" for pair in samples

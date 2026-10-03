@@ -112,8 +112,7 @@ _ALL_CHECKS_DATA: tuple[
         "missing or wrong arguments. FastAPI/Flask route handlers are "
         "excluded because their defaults are a framework user interface "
         "(query parameters, headers) and the handler is invoked by the "
-        "framework, not by application code — the 'not called from "
-        "anywhere' signal doesn't apply.",
+        "framework, not by application code.",
         (),
         run_optional_params,
     ),

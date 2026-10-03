@@ -9,7 +9,7 @@ The scanner runs in two passes:
    dropped.
 2. **Build a ``Corpus``** over the successfully parsed files, giving every
    check a cheap, already-built answer to "does anything in what we scanned
-   call/use this identifier" without re-parsing.
+   use this identifier" without re-parsing.
 3. **Run checks.** Every check has the same signature so the internal check
    API itself has no optional parameters.
 4. **Sort** findings by ``(check_id, path, line)`` and return a
@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from python_surveyor.checks import ALL_CHECKS, COVERED_PYLINT_IDS, CheckSpec
-from python_surveyor.model import CallSite, Finding, Location, ParseError
+from python_surveyor.model import Finding, Location, ParseError
 
 DEFAULT_PRUNED_DIRS: tuple[str, ...] = (
     ".venv",
@@ -65,18 +65,16 @@ class SourceFile:
 class Corpus:
     """Cross-file indices built once over every successfully parsed file.
 
-    ``call_sites`` answers "is this name called anywhere we scanned?".
     ``param_locations`` answers "is this name used as a parameter anywhere?"
     and pairs each hit with the enclosing function's name so the
     fixture-naming check can spot redefined-outer-name collisions.
-    ``max_call_sites`` is the cap the ``optional-param-default`` check applies
-    when sampling call sites into a note (set by the scanner from the CLI
-    flag so checks don't need optional parameters of their own).
+    ``max_samples`` is the cap checks apply when sampling note entries (set
+    by the scanner from the CLI flag so checks don't need optional
+    parameters of their own).
     """
 
-    call_sites: dict[str, tuple[CallSite, ...]]
     param_locations: dict[str, tuple[tuple[Location, str], ...]]
-    max_call_sites: int
+    max_samples: int
     covered_pylint_ids: frozenset[str]
 
 
@@ -150,25 +148,6 @@ def _parse_file(path: Path) -> "tuple[SourceFile | None, ParseError | None]":
     )
 
 
-def _resolve_call_name(node: ast.Call) -> str | None:
-    func = node.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        return func.attr
-    return None
-
-
-def _call_positional_count(node: ast.Call) -> int:
-    """Count positional args (excluding ``*args`` spreads)."""
-    return sum(1 for arg in node.args if not isinstance(arg, ast.Starred))
-
-
-def _call_keywords(node: ast.Call) -> frozenset[str]:
-    """Return the set of keyword arg names (excluding ``**kwargs`` spreads)."""
-    return frozenset(kw.arg for kw in node.keywords if kw.arg is not None)
-
-
 def _collect_params(
     func_node: "ast.FunctionDef | ast.AsyncFunctionDef",
     path: Path,
@@ -193,31 +172,17 @@ def _collect_params(
 
 def _build_corpus(
     source_files: list[SourceFile],
-    max_call_sites: int,
+    max_samples: int,
     covered_pylint_ids: frozenset[str],
 ) -> Corpus:
-    call_sites: dict[str, list[CallSite]] = {}
     param_locations: dict[str, list[tuple[Location, str]]] = {}
     for source_file in source_files:
         for node in ast.walk(source_file.tree):
-            if isinstance(node, ast.Call):
-                resolved = _resolve_call_name(node)
-                if resolved is None:
-                    continue
-                call_sites.setdefault(resolved, []).append(
-                    CallSite(
-                        location=Location(path=source_file.path, line=node.lineno),
-                        positional_count=_call_positional_count(node),
-                        keywords=_call_keywords(node),
-                    )
-                )
-                continue
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 _collect_params(node, source_file.path, param_locations)
     return Corpus(
-        call_sites={k: tuple(v) for k, v in call_sites.items()},
         param_locations={k: tuple(v) for k, v in param_locations.items()},
-        max_call_sites=max_call_sites,
+        max_samples=max_samples,
         covered_pylint_ids=covered_pylint_ids,
     )
 
@@ -226,7 +191,7 @@ def scan(
     root_paths: tuple[str, ...],
     check_ids: "tuple[str, ...] | None",
     excludes: tuple[str, ...],
-    max_call_sites: int,
+    max_samples: int,
 ) -> ScanResult:
     """Run the full discover -> parse -> corpus -> checks pipeline."""
     if check_ids is None:
@@ -248,7 +213,7 @@ def scan(
             continue
         assert parsed is not None
         source_files.append(parsed)
-    corpus = _build_corpus(source_files, max_call_sites, COVERED_PYLINT_IDS)
+    corpus = _build_corpus(source_files, max_samples, COVERED_PYLINT_IDS)
     findings: list[Finding] = []
     for source_file in source_files:
         for check_spec in enabled_checks:

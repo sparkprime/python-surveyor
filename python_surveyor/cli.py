@@ -45,11 +45,11 @@ def main() -> None:
     help="Cap excerpt line count (default 20).",
 )
 @click.option(
-    "--max-call-sites",
-    "max_call_sites",
+    "--max-samples",
+    "max_samples",
     type=int,
     default=10,
-    help="Cap call-site samples in notes (default 10).",
+    help="Cap note-sample counts (default 10).",
 )
 def scan_cmd(
     paths: tuple[str, ...],
@@ -57,7 +57,7 @@ def scan_cmd(
     excludes: tuple[str, ...],
     output: "Path | None",
     max_excerpt_lines: int,
-    max_call_sites: int,
+    max_samples: int,
 ) -> None:
     """Scan PATHS for AI-generated-code smells."""
     root_paths: tuple[str, ...] = paths if paths else (".",)
@@ -65,7 +65,7 @@ def scan_cmd(
         root_paths=root_paths,
         check_ids=check_ids if check_ids else None,
         excludes=excludes,
-        max_call_sites=max_call_sites,
+        max_samples=max_samples,
     )
     stream: TextIO
     if output is not None:
